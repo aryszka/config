@@ -1,0 +1,25 @@
+whitespace:ws = [ \b\f\r\t\v];
+nl:alias      = "\n";
+
+comment:alias = [#] [^\n]*;
+
+single-quote:alias = ['] ([^'\\] | [\\] .)* ['];
+double-quote:alias = ["] ([^"\\] | [\\] .)* ["];
+quote              = single-quote | double-quote;
+value-char:alias   = [^\n'"\\\[\]=#] | [\\] .;
+value              = value-char+ | quote;
+value-form:alias   = value | value comment;
+
+symbol-char:alias = [_a-zA-Z0-9\-];
+symbol:nows       = symbol-char+;
+key-sep:alias     = [.] | "::";
+key:nows          = symbol (key-sep symbol)*;
+
+keyed-value = key [=] value-form;
+
+group-key            = "[" key "]";
+group-key-form:alias = group-key | group-key comment;
+group                = group-key-form (nl (keyed-value | value-form | comment))*;
+
+entry:alias = comment | group | keyed-value;
+doc:root    = nl* (entry (nl+ entry)*)? nl*;
