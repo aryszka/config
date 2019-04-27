@@ -173,6 +173,7 @@ func TestParseIni(t *testing.T) {
 	testFail(t, "empty key", "= 42")
 	testFail(t, "missing value", "foo =")
 	testSucceed(t, "keyed value", "foo = 42", children(keyedValue("foo", "42")))
+	testSucceed(t, "keyed value, trimmed", " foo = 42 ", children(keyedValue("foo", "42")))
 	testFail(t, "unclosed quote", "foo = \"bar")
 	testFail(t, "unclosed single quote", "foo = 'bar")
 	testFail(t, "invalid chars", "foo = \\", "foo = [", "foo = ]", "foo = =")
