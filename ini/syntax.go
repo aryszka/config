@@ -816,7 +816,7 @@ func parse(r io.Reader) (*Node, error) {
 	var p1 = charParser{id: 1, chars: []rune{32, 8, 12, 13, 9, 11}}
 	p91.items = []parser{&p1}
 	p92.options = []parser{&p91}
-	var p93 = sequenceParser{id: 93, commit: 258, name: "doc:wsroot", ranges: [][]int{{0, 1}, {0, -1}, {0, 1}, {0, 1}}}
+	var p93 = sequenceParser{id: 93, commit: 258, name: "config:wsroot", ranges: [][]int{{0, 1}, {0, -1}, {0, 1}, {0, 1}}}
 	var p88 = sequenceParser{id: 88, commit: 2, ranges: [][]int{{1, 1}, {0, -1}}}
 	var p3 = sequenceParser{id: 3, commit: 266, name: "nl", allChars: true, ranges: [][]int{{1, 1}, {1, 1}}}
 	var p2 = charParser{id: 2, chars: []rune{10}}
@@ -974,7 +974,7 @@ func parse(r io.Reader) (*Node, error) {
 	p90.items = []parser{&p92, &p3, &p89}
 	p93.items = []parser{&p88, &p92, &p86, &p90}
 	p94.items = []parser{&p92, &p93, &p92}
-	var b94 = sequenceBuilder{id: 94, commit: 128, name: "doc", ranges: [][]int{{0, -1}, {1, 1}, {0, -1}}}
+	var b94 = sequenceBuilder{id: 94, commit: 128, name: "config", ranges: [][]int{{0, -1}, {1, 1}, {0, -1}}}
 	var b92 = choiceBuilder{id: 92, commit: 2}
 	var b91 = sequenceBuilder{id: 91, commit: 262, allChars: true, ranges: [][]int{{1, 1}, {1, 1}}, generalizations: []int{92}}
 	var b1 = charBuilder{}

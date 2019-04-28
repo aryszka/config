@@ -22,4 +22,4 @@ group-key-form:alias = group-key | group-key comment;
 group                = group-key-form (nl (keyed-value | value-form | comment))*;
 
 entry:alias = comment | group | keyed-value;
-doc:root    = nl* (entry (nl+ entry)*)? nl*;
+config:root = nl* (entry (nl+ entry)*)? nl*;
