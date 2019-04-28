@@ -1,5 +1,5 @@
 whitespace:ws = [ \b\f\r\t\v];
-nl:alias      = "\n";
+nl:alias      = [\n];
 
 comment:alias = [#] [^\n]*;
 

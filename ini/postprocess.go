@@ -27,7 +27,7 @@ func processQuote(parent *node, n *Node) error {
 }
 
 func processValue(parent *node, n *Node) error {
-	if len(n.Nodes) == 1 {
+	if len(n.Nodes) > 0 {
 		return processNode(parent, n.Nodes[0])
 	}
 
