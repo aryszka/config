@@ -32,7 +32,7 @@ qux = 84
 
 Groups are terminated by an empty line or by another group and cannot be nested.
 
-Defining mutliple values for the same field (a form of listing):
+Defining multiple values for the same field (a form of listing):
 
 ```
 foo.bar.baz = 1
@@ -59,13 +59,13 @@ Concepts in the syntax:
   used for mapping config values to fields in an in-memory structure. Can contain the following characters:
   _-a-zA-Z0-9.
 - **key:**
-  contains one or more symbols, separated by . or ::, without whitespaces. It's used as the path to find the
+  contains one or more symbols, separated by . or ::, without whitespace. It's used as the path to find the
   right field in an in-memory structure.
 - **value:**
-  can contain any characters excep for \, ", ', [, ], =, \n, #. When some of these characters are required in a
-  value, then escaping can be used with \, or the value can be quoted with " or '. When a value is qouted with
-  ", then any character can be used except for \ and ", which can be escaped with \. When a value is quoted with
-  ', then any character can be used except for \ and ', which can be escaped with \.
+  can contain any characters except for \\, ", ', [, ], =, \\n, #. When some of these characters are required in a
+  value, then escaping can be used with \, or the value can be quoted with " or '. When a value is quoted with
+  ", then any character can be used except for \\ and ", which can be escaped with \\. When a value is quoted with
+  ', then any character can be used except for \\ and ', which can be escaped with \\.
 - **keyed value:**
   consists of a key and a value separated by a = character.
 - **group:**
