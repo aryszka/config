@@ -1,49 +1,31 @@
 package config
 
-// TODO:
-// - how to deal with the annotations for yaml and json?
-// - how to control file types
-// - how to handle unsupported keys in files
-// - how to handle which possible file sources are allowed
+/*
+import "github.com/aryszka/config/configsource"
 
-type Test struct {
-	fileSystem map[string]string
-	env        map[string]string
-	flags      map[string]string
-}
-
-type Settings struct {
-	base         string
-	fileFlagName string
-	Test         *Test
-}
-
-func (t *Test) SetFileSystem(fs map[string]string) {
-	t.fileSystem = fs
-}
-
-func (t *Test) SetEnv(e map[string]string) {
-	t.env = e
-}
-
-func (t *Test) SetFlags(f map[string]string) {
-	t.flags = f
-}
-
-func New() *Settings {
-	return &Settings{
-		Test: &Test{},
+func apply(target interface{}, withPositional bool) ([]string, error) {
+	s, err := configsource.Default()
+	if err != nil {
+		return nil, err
 	}
+
+	if err := configsource.Apply(s, target); err != nil {
+		return nil, err
+	}
+
+	if !withPositional {
+		return nil, nil
+	}
+
+	return configsource.Positional(s), nil
 }
 
-func (s *Settings) SetFileBase(base string) {
-	s.base = base
+func Apply(target interface{}) error {
+	_, err := apply(target, false)
+	return err
 }
 
-func (s *Settings) SetFileFlagName(n string) {
-	s.fileFlagName = n
+func WithPositional(target interface{}) ([]string, error) {
+	return apply(target, true)
 }
-
-func (s *Settings) Apply(o interface{}) error {
-	return nil
-}
+*/

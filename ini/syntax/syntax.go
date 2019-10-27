@@ -16,7 +16,7 @@ that the user of treerack generating this file declares for it, or it is
 unlicensed.
 */
 
-package ini
+package syntax
 
 import (
 	"bufio"
@@ -808,7 +808,7 @@ func parseInput(r io.Reader, p parser, b builder, kw []parser) (*Node, error) {
 	return n[0], nil
 }
 
-func parse(r io.Reader) (*Node, error) {
+func Parse(r io.Reader) (*Node, error) {
 
 	var p94 = sequenceParser{id: 94, commit: 128, ranges: [][]int{{0, -1}, {1, 1}, {0, -1}}}
 	var p92 = choiceParser{id: 92, commit: 2}
@@ -818,7 +818,7 @@ func parse(r io.Reader) (*Node, error) {
 	p92.options = []parser{&p91}
 	var p93 = sequenceParser{id: 93, commit: 258, name: "config:wsroot", ranges: [][]int{{0, 1}, {0, -1}, {0, 1}, {0, 1}}}
 	var p88 = sequenceParser{id: 88, commit: 2, ranges: [][]int{{1, 1}, {0, -1}}}
-	var p3 = sequenceParser{id: 3, commit: 266, name: "nl", allChars: true, ranges: [][]int{{1, 1}, {1, 1}}}
+	var p3 = sequenceParser{id: 3, commit: 258, name: "nl", allChars: true, ranges: [][]int{{1, 1}}}
 	var p2 = charParser{id: 2, chars: []rune{10}}
 	p3.items = []parser{&p2}
 	var p87 = sequenceParser{id: 87, commit: 2, ranges: [][]int{{0, -1}, {1, 1}}}
@@ -982,7 +982,7 @@ func parse(r io.Reader) (*Node, error) {
 	b92.options = []builder{&b91}
 	var b93 = sequenceBuilder{id: 93, commit: 258, ranges: [][]int{{0, 1}, {0, -1}, {0, 1}, {0, 1}}}
 	var b88 = sequenceBuilder{id: 88, commit: 2, ranges: [][]int{{1, 1}, {0, -1}}}
-	var b3 = sequenceBuilder{id: 3, commit: 266, allChars: true, ranges: [][]int{{1, 1}, {1, 1}}}
+	var b3 = sequenceBuilder{id: 3, commit: 258, allChars: true, ranges: [][]int{{1, 1}}}
 	var b2 = charBuilder{}
 	b3.items = []builder{&b2}
 	var b87 = sequenceBuilder{id: 87, commit: 2, ranges: [][]int{{0, -1}, {1, 1}}}

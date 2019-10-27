@@ -4,13 +4,14 @@ default: build
 
 deps:
 	go get github.com/aryszka/treerack/...
+	go get ./...
 
 build:
 	go build
 
 check:
-	treerack check-syntax ini/syntax.treerack
-	treerack check -syntax ini/syntax.treerack examples/skipper.ini
+	treerack check-syntax ini/syntax/syntax.treerack
+	treerack check -syntax ini/syntax/syntax.treerack examples/skipper.ini
 	go test ./...
 
 .coverprofile:
@@ -23,11 +24,12 @@ showcover: .coverprofile
 	go tool cover -html .coverprofile
 
 syntax:
-	treerack generate -package-name ini -syntax ini/syntax.treerack > ini/syntax.go
+	treerack generate -package-name syntax -export -syntax ini/syntax/syntax.treerack > ini/syntax/syntax.go
 	gofmt -w -s ./ini
 
 fmt:
 	gofmt -w -s .
 	gofmt -w -s ./ini
+	gofmt -w -s ./keys
 
 precommit: fmt check

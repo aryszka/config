@@ -2,6 +2,9 @@ package ini
 
 import "fmt"
 
+// TODO:
+// - common escape sequences
+
 var (
 	escapeChars        = []rune{'\\'}
 	escapedSingleQuote = []rune{'\\', '\''}

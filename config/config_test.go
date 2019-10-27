@@ -6,7 +6,7 @@ func TestOverride(t *testing.T) {
 	t.Skip()
 
 	s := New()
-	s.SetFileBase("app/config")
+	s.SetBasePath("app/config")
 	s.Test.SetFileSystem(testFileSystem{
 		"/etc/app/config": `
 			foo = 1

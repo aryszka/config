@@ -1,32 +1,24 @@
 package ini
 
-import "fmt"
+import (
+	"errors"
 
-type node struct {
-	values   []string
-	children map[string]*node
-	used     bool
-}
+	"github.com/aryszka/config/ini/syntax"
+)
 
-func errUnexpectedASTNodeType(name string) error {
-	return fmt.Errorf("unexpected AST node type: %s", name)
-}
+var errUnexpectedParserResult = errors.New("unexpected parser result")
 
-func errUnexpectedASTNodeStructure(n *Node) error {
-	return fmt.Errorf("unexpected AST node structure: %s", n.Name)
-}
-
-func processQuote(parent *node, n *Node) error {
+func processQuote(parent *Node, n *syntax.Node) error {
 	text, err := unquote(n.Text())
 	if err != nil {
 		return err
 	}
 
-	parent.values = append(parent.values, text)
+	parent.Values = append(parent.Values, text)
 	return nil
 }
 
-func processValue(parent *node, n *Node) error {
+func processValue(parent *Node, n *syntax.Node) error {
 	if len(n.Nodes) > 0 {
 		return processNode(parent, n.Nodes[0])
 	}
@@ -36,11 +28,11 @@ func processValue(parent *node, n *Node) error {
 		return err
 	}
 
-	parent.values = append(parent.values, text)
+	parent.Values = append(parent.Values, text)
 	return nil
 }
 
-func getKey(n *Node) []string {
+func getKey(n *syntax.Node) []string {
 	var key []string
 	for _, symbol := range n.Nodes {
 		key = append(key, symbol.Text())
@@ -49,23 +41,28 @@ func getKey(n *Node) []string {
 	return key
 }
 
-func getOrCreateChild(n *node, key []string) *node {
+func getOrCreateChild(n *Node, key []string) *Node {
 	if len(key) == 0 {
 		return n
 	}
 
-	child, exists := n.children[key[0]]
+	if n.Fields == nil {
+		n.Fields = make(map[string]*Node)
+	}
+
+	child, exists := n.Fields[key[0]]
 	if !exists {
-		child = &node{children: make(map[string]*node)}
-		n.children[key[0]] = child
+		child = &Node{}
+		n.Fields[key[0]] = child
 	}
 
 	return getOrCreateChild(child, key[1:])
 }
 
-func processKeyedValue(parent *node, n *Node) error {
+func processKeyedValue(parent *Node, n *syntax.Node) error {
 	if len(n.Nodes) < 2 {
-		return errUnexpectedASTNodeStructure(n)
+		// TODO: error info
+		return errUnexpectedParserResult
 	}
 
 	key := getKey(n.Nodes[0])
@@ -73,7 +70,7 @@ func processKeyedValue(parent *node, n *Node) error {
 	return processNode(child, n.Nodes[1])
 }
 
-func processNodes(parent *node, n []*Node) error {
+func processNodes(parent *Node, n []*syntax.Node) error {
 	for i := range n {
 		if err := processNode(parent, n[i]); err != nil {
 			return err
@@ -83,9 +80,10 @@ func processNodes(parent *node, n []*Node) error {
 	return nil
 }
 
-func processGroup(parent *node, n *Node) error {
+func processGroup(parent *Node, n *syntax.Node) error {
 	if len(n.Nodes) == 0 || len(n.Nodes[0].Nodes) == 0 {
-		return errUnexpectedASTNodeStructure(n)
+		// TODO: error info
+		return errUnexpectedParserResult
 	}
 
 	key := getKey(n.Nodes[0].Nodes[0])
@@ -93,11 +91,11 @@ func processGroup(parent *node, n *Node) error {
 	return processNodes(child, n.Nodes[1:])
 }
 
-func processConfig(parent *node, n *Node) error {
+func processConfig(parent *Node, n *syntax.Node) error {
 	return processNodes(parent, n.Nodes)
 }
 
-func processNode(parent *node, n *Node) error {
+func processNode(parent *Node, n *syntax.Node) error {
 	switch n.Name {
 	case "quote":
 		return processQuote(parent, n)
@@ -110,12 +108,13 @@ func processNode(parent *node, n *Node) error {
 	case "config":
 		return processConfig(parent, n)
 	default:
-		return errUnexpectedASTNodeType(n.Name)
+		// TODO: error info
+		return errUnexpectedParserResult
 	}
 }
 
-func postprocess(n *Node) (*node, error) {
-	root := &node{children: make(map[string]*node)}
+func postprocess(n *syntax.Node) (*Node, error) {
+	root := &Node{}
 	err := processNode(root, n)
 	return root, err
 }

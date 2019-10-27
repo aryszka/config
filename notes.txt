@@ -1,0 +1,4 @@
+command line tool:
+- generate defaults with docs
+doc builder
+doc formatter
