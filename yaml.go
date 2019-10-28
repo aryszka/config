@@ -9,7 +9,7 @@ import (
 	"github.com/go-yaml/yaml"
 )
 
-type yamlLoader struct {
+type yamlReader struct {
 	input io.Reader
 }
 
@@ -17,8 +17,8 @@ func invalidYAMLKey(...interface{}) error {
 	return errors.New("invalid YAML key")
 }
 
-func newYAMLLoader(r io.Reader) Loader {
-	return yamlLoader{input: r}
+func newYAMLReader(r io.Reader) Reader {
+	return yamlReader{input: r}
 }
 
 func sanitizeYAML(o interface{}) (interface{}, error) {
@@ -56,7 +56,7 @@ func sanitizeYAML(o interface{}) (interface{}, error) {
 	}
 }
 
-func (l yamlLoader) Load() (interface{}, error) {
+func (l yamlReader) Read() (interface{}, error) {
 	b, err := ioutil.ReadAll(l.input)
 	if err != nil {
 		return nil, err
@@ -72,7 +72,7 @@ func (l yamlLoader) Load() (interface{}, error) {
 	}
 
 	if ws {
-		return nil, ErrEmptyConfig
+		return nil, ErrNoConfig
 	}
 
 	var o interface{}
@@ -83,8 +83,8 @@ func (l yamlLoader) Load() (interface{}, error) {
 	return sanitizeYAML(o)
 }
 
-func (l yamlLoader) TypeMapping() map[NodeType]NodeType {
+func (l yamlReader) TypeMapping() map[NodeType]NodeType {
 	return nil
 }
 
-func YAML(r io.Reader) Source { return WithLoader(newYAMLLoader(r)) }
+func YAML(r io.Reader) Source { return WithReader(newYAMLReader(r)) }

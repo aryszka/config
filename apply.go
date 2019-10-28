@@ -149,7 +149,7 @@ func applyBool(v reflect.Value, n Node) (bool, error) {
 		v.SetBool(b)
 		return true, nil
 	default:
-		return false, ErrLoaderImplementation
+		return false, ErrSourceImplementation
 	}
 }
 
@@ -220,7 +220,7 @@ func applyInt(v reflect.Value, n Node) (bool, error) {
 		v.SetInt(ri)
 		return true, nil
 	default:
-		return false, ErrLoaderImplementation
+		return false, ErrSourceImplementation
 	}
 }
 
@@ -299,7 +299,7 @@ func applyUint(v reflect.Value, n Node) (bool, error) {
 		v.SetUint(ru)
 		return true, nil
 	default:
-		return false, ErrLoaderImplementation
+		return false, ErrSourceImplementation
 	}
 }
 
@@ -350,7 +350,7 @@ func applyFloat(v reflect.Value, n Node) (bool, error) {
 		v.SetFloat(rf)
 		return true, nil
 	default:
-		return false, ErrLoaderImplementation
+		return false, ErrSourceImplementation
 	}
 }
 
@@ -598,8 +598,8 @@ func Apply(applyTo interface{}, s Source) error {
 		return invalidTarget()
 	}
 
-	n, err := s.Load()
-	if errors.Is(err, ErrEmptyConfig) {
+	n, err := s.Read()
+	if errors.Is(err, ErrNoConfig) {
 		return nil
 	}
 

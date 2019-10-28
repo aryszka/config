@@ -5,20 +5,22 @@ import (
 	"fmt"
 )
 
-// TODO: gradual loader may be required because when loading from a database, we may not want to load everything
-// if it's not required. An additional loader node type may be the right solution. This will be more interesting
+// TODO: gradual reader may be required because when reading from a database, we may not want to read everything
+// if it's not required. An additional reader node type may be the right solution. This will be more interesting
 // when it will be possible to update the config on-the-fly.
 
-type Loader interface {
-	Load() (interface{}, error)
+type Reader interface {
+	Read() (interface{}, error)
 	TypeMapping() map[NodeType]NodeType
 }
 
 type NodeType int
 
+const undefined NodeType = 0
+
 const (
-	Nil  NodeType = 0
-	Bool NodeType = 1 << iota
+	Nil NodeType = 1 << iota
+	Bool
 	Int
 	Float
 	String
@@ -27,6 +29,7 @@ const (
 	ignored   // for testing
 	Number    = Int | Float
 	Primitive = Bool | Number | String
+	any       = Primitive | List | Structure
 )
 
 type Node interface {
@@ -39,26 +42,32 @@ type Node interface {
 }
 
 type Source interface {
-	Load() (Node, error)
+	Read() (Node, error)
 }
 
 // TODO: split source and node
 type source struct {
-	loader      Loader
+	reader      Reader
 	typeMapping map[NodeType]NodeType
 	node        interface{}
 	name        string
+	hasRead bool
+	err error
 }
 
 var (
-	ErrLoaderImplementation = errors.New("loader implementation")
-	ErrEmptyConfig          = errors.New("empty config")
+	ErrSourceImplementation = errors.New("reader implementation")
+	ErrNoConfig             = errors.New("empty config")
 	ErrInvalidTarget        = errors.New("invalid target")
 	ErrInvalidInputValue    = errors.New("invalid input value")
 	ErrTooManyValues        = errors.New("too many values")
 	ErrNumericOverflow      = fmt.Errorf("%w: integer overflow", ErrInvalidInputValue)
 	ErrConflictingKeys      = errors.New("conflicting keys")
 )
+
+func WithReader(l Reader) Source {
+	return &source{reader: l}
+}
 
 func (s source) sourceErrorf(format string, args ...interface{}) error {
 	if s.name != "" {
@@ -76,17 +85,24 @@ func (s source) sourceError(err error) error {
 	return s.sourceErrorf("%w", err)
 }
 
-func WithLoader(l Loader) Source {
-	return source{loader: l}
-}
-
-func (s source) Load() (Node, error) {
-	node, err := s.loader.Load()
-	if err != nil {
-		return nil, s.sourceError(err)
+func (s *source) Read() (Node, error) {
+	if s.hasRead && s.err != nil {
+		return nil, s.err
 	}
 
-	return source{node: node, typeMapping: s.loader.TypeMapping()}, nil
+	if s.hasRead {
+		return source{node: s.node, typeMapping: s.reader.TypeMapping()}, nil
+	}
+
+	s.hasRead = true
+	node, err := s.reader.Read()
+	if err != nil {
+		s.err = s.sourceError(err)
+		return nil, s.err
+	}
+
+	s.node = node
+	return source{node: node, typeMapping: s.reader.TypeMapping()}, nil
 }
 
 func (s source) defaultType() NodeType {
@@ -117,7 +133,7 @@ func (s source) defaultType() NodeType {
 	default:
 		panic(s.sourceErrorf(
 			"%w; unexpected type: %v",
-			ErrLoaderImplementation,
+			ErrSourceImplementation,
 			s.node,
 		))
 	}

@@ -6,13 +6,13 @@ import (
 	"io/ioutil"
 )
 
-type jsonLoader struct {
+type jsonReader struct {
 	input       io.Reader
 	typeMapping map[NodeType]NodeType
 }
 
-func newJSONLoader(r io.Reader) jsonLoader {
-	return jsonLoader{
+func newJSONReader(r io.Reader) *jsonReader {
+	return &jsonReader{
 		input: r,
 		typeMapping: map[NodeType]NodeType{
 			Float: Number,
@@ -20,7 +20,7 @@ func newJSONLoader(r io.Reader) jsonLoader {
 	}
 }
 
-func (l jsonLoader) Load() (interface{}, error) {
+func (l *jsonReader) Read() (interface{}, error) {
 	b, err := ioutil.ReadAll(l.input)
 	if err != nil {
 		return nil, err
@@ -31,8 +31,8 @@ func (l jsonLoader) Load() (interface{}, error) {
 	return o, err
 }
 
-func (l jsonLoader) TypeMapping() map[NodeType]NodeType {
+func (l jsonReader) TypeMapping() map[NodeType]NodeType {
 	return l.typeMapping
 }
 
-func JSON(r io.Reader) Source { return WithLoader(newJSONLoader(r)) }
+func JSON(r io.Reader) Source { return WithReader(newJSONReader(r)) }

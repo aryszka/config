@@ -8,18 +8,18 @@ import (
 	"testing"
 )
 
-type testLoader struct {
+type testReader struct {
 	value interface{}
 	fail  bool
 	types map[NodeType]NodeType
 }
 
 var (
-	errTestLoadFailed = errors.New("test load failed")
+	errTestReadFailed = errors.New("test read failed")
 	errOddMapping     = errors.New("odd mapping")
 )
 
-func singleValueLoader(value interface{}, mapping ...NodeType) Loader {
+func singleValueReader(value interface{}, mapping ...NodeType) Reader {
 	if len(mapping)%2 != 0 {
 		panic(errOddMapping)
 	}
@@ -29,47 +29,54 @@ func singleValueLoader(value interface{}, mapping ...NodeType) Loader {
 		types[mapping[i]] = mapping[i+1]
 	}
 
-	return testLoader{value: value, types: types}
+	return testReader{value: value, types: types}
 }
 
-func failingLoader() Loader {
-	return testLoader{fail: true}
+func failingReader() Reader {
+	return testReader{fail: true}
 }
 
-func (l testLoader) Load() (interface{}, error) {
+func (l testReader) Read() (interface{}, error) {
 	if l.fail {
-		return nil, errTestLoadFailed
+		return nil, errTestReadFailed
 	}
 
 	return l.value, nil
 }
 
-func (l testLoader) TypeMapping() map[NodeType]NodeType {
+func (l testReader) TypeMapping() map[NodeType]NodeType {
 	return l.types
 }
 
 func TestApplyInvalidTarget(t *testing.T) {
-	t.Run("zero options", func(t *testing.T) {
-		type options struct{ Foo int }
-		var o options
-		j := bytes.NewBufferString(`{"foo": 42}`)
-		s := JSON(j)
-		if err := Apply(o, s); !errors.Is(err, ErrInvalidTarget) {
-			t.Error("failed to fail with the right error", err)
-		}
+	t.Run("no pointer", func(t *testing.T) {
+		t.Run("zero options", func(t *testing.T) {
+			type options struct{ Foo int }
+			var o options
+			j := bytes.NewBufferString(`{"foo": 42}`)
+			s := JSON(j)
+			if err := Apply(o, s); !errors.Is(err, ErrInvalidTarget) {
+				t.Error("failed to fail with the right error", err)
+			}
+		})
+
+		t.Run("options with defaults", func(t *testing.T) {
+			type options struct{ Foo int }
+			o := options{Foo: 42}
+			j := bytes.NewBufferString(`{"foo": 42}`)
+			s := JSON(j)
+			if err := Apply(o, s); !errors.Is(err, ErrInvalidTarget) {
+				t.Error("failed to fail with the right error", err)
+			}
+		})
 	})
 
-	t.Run("options with defaults", func(t *testing.T) {
-		type options struct{ Foo int }
-		o := options{Foo: 42}
-		j := bytes.NewBufferString(`{"foo": 42}`)
+	t.Run("nil pointer", func(t *testing.T) {
+		var p *int
+		j := bytes.NewBufferString("42")
 		s := JSON(j)
-		if err := Apply(o, s); !errors.Is(err, ErrInvalidTarget) {
-			t.Error("failed to fail with the right error", err)
-		}
-
-		if o.Foo != 42 {
-			t.Error("failed to leave defaults")
+		if err := Apply(p, s); !errors.Is(err, ErrInvalidTarget) {
+			t.Error("failed to fail with the right error")
 		}
 	})
 }
@@ -220,11 +227,11 @@ func TestApplyEmptyConfig(t *testing.T) {
 	})
 }
 
-func TestApplyLoadFailed(t *testing.T) {
+func TestApplyReadFailed(t *testing.T) {
 	type options struct{ Foo int }
 	o := options{Foo: 42}
-	s := WithLoader(failingLoader())
-	if err := Apply(&o, s); !errors.Is(err, errTestLoadFailed) {
+	s := WithReader(failingReader())
+	if err := Apply(&o, s); !errors.Is(err, errTestReadFailed) {
 		t.Error("failed to fail with the right error", err)
 	}
 
@@ -243,10 +250,10 @@ func TestApplyToBool(t *testing.T) {
 		}
 	})
 
-	t.Run("parsed, lying loader", func(t *testing.T) {
+	t.Run("parsed, lying reader", func(t *testing.T) {
 		var o bool
-		s := WithLoader(singleValueLoader(42, Int, Bool))
-		if err := Apply(&o, s); !errors.Is(err, ErrLoaderImplementation) {
+		s := WithReader(singleValueReader(42, Int, Bool))
+		if err := Apply(&o, s); !errors.Is(err, ErrSourceImplementation) {
 			t.Error("failed to fail with the right error")
 		}
 	})
@@ -593,7 +600,7 @@ func TestApplyToInt(t *testing.T) {
 	t.Run("parsed", func(t *testing.T) {
 		t.Run("overflow", func(t *testing.T) {
 			var o int16
-			s := WithLoader(singleValueLoader(int(^uint16(0)>>1) + 1))
+			s := WithReader(singleValueReader(int(^uint16(0)>>1) + 1))
 			if err := Apply(&o, s); !errors.Is(err, ErrNumericOverflow) {
 				t.Error("failed to fail with the right error", err)
 			}
@@ -627,7 +634,7 @@ func TestApplyToInt(t *testing.T) {
 
 		t.Run("unsigned overflow", func(t *testing.T) {
 			var o int16
-			s := WithLoader(singleValueLoader(^uint16(0)>>1 + 1))
+			s := WithReader(singleValueReader(^uint16(0)>>1 + 1))
 			if err := Apply(&o, s); !errors.Is(err, ErrNumericOverflow) {
 				t.Error("failed to fail with the right error", err)
 			}
@@ -635,7 +642,7 @@ func TestApplyToInt(t *testing.T) {
 
 		t.Run("unsigned, no overflow", func(t *testing.T) {
 			var o int16
-			s := WithLoader(singleValueLoader(uint64(42)))
+			s := WithReader(singleValueReader(uint64(42)))
 			if err := Apply(&o, s); err != nil {
 				t.Error(err)
 			}
@@ -676,10 +683,10 @@ func TestApplyToInt(t *testing.T) {
 			}
 		})
 
-		t.Run("lying loader", func(t *testing.T) {
+		t.Run("lying reader", func(t *testing.T) {
 			var o int
-			s := WithLoader(singleValueLoader(true, Bool, Int))
-			if err := Apply(&o, s); !errors.Is(err, ErrLoaderImplementation) {
+			s := WithReader(singleValueReader(true, Bool, Int))
+			if err := Apply(&o, s); !errors.Is(err, ErrSourceImplementation) {
 				t.Error("failed to fail with the right error")
 			}
 		})
@@ -869,7 +876,7 @@ func TestApplyToUint(t *testing.T) {
 	t.Run("parsed", func(t *testing.T) {
 		t.Run("overflow", func(t *testing.T) {
 			var o uint16
-			s := WithLoader(singleValueLoader(uint(^uint16(0)) + 1))
+			s := WithReader(singleValueReader(uint(^uint16(0)) + 1))
 			if err := Apply(&o, s); !errors.Is(err, ErrNumericOverflow) {
 				t.Error("failed to fail with the right error", err)
 			}
@@ -877,7 +884,7 @@ func TestApplyToUint(t *testing.T) {
 
 		t.Run("native size", func(t *testing.T) {
 			var o uint
-			s := WithLoader(singleValueLoader(uint(42)))
+			s := WithReader(singleValueReader(uint(42)))
 			if err := Apply(&o, s); err != nil {
 				t.Error(err)
 			}
@@ -889,7 +896,7 @@ func TestApplyToUint(t *testing.T) {
 
 		t.Run("fixed size", func(t *testing.T) {
 			var o uint16
-			s := WithLoader(singleValueLoader(uint(42)))
+			s := WithReader(singleValueReader(uint(42)))
 			if err := Apply(&o, s); err != nil {
 				t.Error(err)
 			}
@@ -901,7 +908,7 @@ func TestApplyToUint(t *testing.T) {
 
 		t.Run("signed, overflow", func(t *testing.T) {
 			var o uint16
-			s := WithLoader(singleValueLoader(int(^uint16(0)) + 1))
+			s := WithReader(singleValueReader(int(^uint16(0)) + 1))
 			if err := Apply(&o, s); !errors.Is(err, ErrNumericOverflow) {
 				t.Error("failed to fail with the right error", err)
 			}
@@ -918,7 +925,7 @@ func TestApplyToUint(t *testing.T) {
 
 		t.Run("unsigned, no overflow", func(t *testing.T) {
 			var o uint16
-			s := WithLoader(singleValueLoader(int64(42)))
+			s := WithReader(singleValueReader(int64(42)))
 			if err := Apply(&o, s); err != nil {
 				t.Error(err)
 			}
@@ -968,10 +975,10 @@ func TestApplyToUint(t *testing.T) {
 			}
 		})
 
-		t.Run("lying loader", func(t *testing.T) {
+		t.Run("lying reader", func(t *testing.T) {
 			var o uint
-			s := WithLoader(singleValueLoader(true, Bool, Int))
-			if err := Apply(&o, s); !errors.Is(err, ErrLoaderImplementation) {
+			s := WithReader(singleValueReader(true, Bool, Int))
+			if err := Apply(&o, s); !errors.Is(err, ErrSourceImplementation) {
 				t.Error("failed to fail with the right error")
 			}
 		})
@@ -1015,7 +1022,7 @@ func TestApplyToFloat(t *testing.T) {
 	t.Run("parsed", func(t *testing.T) {
 		t.Run("int", func(t *testing.T) {
 			var o float64
-			s := WithLoader(singleValueLoader(42, Int, Int|Float))
+			s := WithReader(singleValueReader(42, Int, Int|Float))
 			if err := Apply(&o, s); err != nil {
 				t.Error(err)
 			}
@@ -1027,7 +1034,7 @@ func TestApplyToFloat(t *testing.T) {
 
 		t.Run("uint", func(t *testing.T) {
 			var o float64
-			s := WithLoader(singleValueLoader(uint(42), Int, Int|Float))
+			s := WithReader(singleValueReader(uint(42), Int, Int|Float))
 			if err := Apply(&o, s); err != nil {
 				t.Error(err)
 			}
@@ -1052,16 +1059,16 @@ func TestApplyToFloat(t *testing.T) {
 
 		t.Run("overflow", func(t *testing.T) {
 			var o float32
-			s := WithLoader(singleValueLoader(math.MaxFloat32 * 2))
+			s := WithReader(singleValueReader(math.MaxFloat32 * 2))
 			if err := Apply(&o, s); !errors.Is(err, ErrNumericOverflow) {
 				t.Error("failed to fail with the right error")
 			}
 		})
 
-		t.Run("lying loader", func(t *testing.T) {
+		t.Run("lying reader", func(t *testing.T) {
 			var o float64
-			s := WithLoader(singleValueLoader(true, Bool, Float))
-			if err := Apply(&o, s); !errors.Is(err, ErrLoaderImplementation) {
+			s := WithReader(singleValueReader(true, Bool, Float))
+			if err := Apply(&o, s); !errors.Is(err, ErrSourceImplementation) {
 				t.Error("failed to fail with the right value", err)
 			}
 		})
@@ -1115,9 +1122,9 @@ func TestApplyToString(t *testing.T) {
 		})
 	})
 
-	t.Run("lying loader", func(t *testing.T) {
+	t.Run("lying reader", func(t *testing.T) {
 		var o string
-		s := WithLoader(singleValueLoader(42, Int, String))
+		s := WithReader(singleValueReader(42, Int, String))
 		if err := Apply(&o, s); !errors.Is(err, ErrInvalidInputValue) {
 			t.Error("failed to fail with the right error")
 		}
@@ -1536,7 +1543,7 @@ func TestApplyToInterface(t *testing.T) {
 
 	t.Run("not implemented source type", func(t *testing.T) {
 		var o iface = 21
-		s := WithLoader(singleValueLoader(42, Int, ignored))
+		s := WithReader(singleValueReader(42, Int, ignored))
 		if err := Apply(&o, s); err != nil {
 			t.Error(err)
 		}
