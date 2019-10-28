@@ -69,19 +69,37 @@ func TestMerge(t *testing.T) {
 	})
 
 	t.Run("no config at all", func(t *testing.T) {
-		o := struct{ Foo int }{42}
-		s := Merge(
-			testSource{err: ErrNoConfig},
-			testSource{err: ErrNoConfig},
-		)
+		t.Run("structure", func(t *testing.T) {
+			o := struct{ Foo int }{42}
+			s := Merge(
+				testSource{err: ErrNoConfig},
+				testSource{err: ErrNoConfig},
+			)
 
-		if err := Apply(&o, s); err != nil {
-			t.Error(err)
-		}
+			if err := Apply(&o, s); err != nil {
+				t.Error(err)
+			}
 
-		if o.Foo != 42 {
-			t.Error("failed to ignore sources")
-		}
+			if o.Foo != 42 {
+				t.Error("failed to ignore sources")
+			}
+		})
+
+		t.Run("primitive", func(t *testing.T) {
+			o := 42
+			s := Merge(
+				testSource{err: ErrNoConfig},
+				testSource{err: ErrNoConfig},
+			)
+
+			if err := Apply(&o, s); err != nil {
+				t.Error(err)
+			}
+
+			if o != 42 {
+				t.Error("failed to ignore sources")
+			}
+		})
 	})
 
 	t.Run("only primitive", func(t *testing.T) {

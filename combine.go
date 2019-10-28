@@ -34,12 +34,16 @@ func (s mergedSource) Read() (Node, error) {
 		n = append(n, ni)
 	}
 
+	if len(n) == 0 {
+		return nil, ErrNoConfig
+	}
+
 	return mergeNodes(n...), nil
 }
 
 func mergeNodes(n ...Node) *mergedNode {
-	// this merging can become interesting with map targets. What's the most expected?
-	// the answer should go into a decision log and documentation
+	// TODO: this merging can become interesting with map targets. What's the most expected? The answer
+	// should go into a decision log and documentation
 
 	var (
 		valueNode  Node
