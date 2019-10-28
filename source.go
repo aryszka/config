@@ -24,6 +24,7 @@ const (
 	String
 	List
 	Structure
+	ignored   // for testing
 	Number    = Int | Float
 	Primitive = Bool | Number | String
 )
@@ -56,6 +57,7 @@ var (
 	ErrInvalidInputValue    = errors.New("invalid input value")
 	ErrTooManyValues        = errors.New("too many values")
 	ErrNumericOverflow      = fmt.Errorf("%w: integer overflow", ErrInvalidInputValue)
+	ErrConflictingKeys      = errors.New("conflicting keys")
 )
 
 func (s source) sourceErrorf(format string, args ...interface{}) error {

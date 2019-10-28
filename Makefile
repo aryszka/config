@@ -1,20 +1,23 @@
-.PHONY: .coverprofile
+SOURCES = $(shell find . -name "*.go")
+
+.PHONY: cover showcover
 
 default: build
 
 deps:
+	go get golang.org/x/tools/cmd/goimports
 	go get github.com/aryszka/treerack/...
 	go get ./...
 
-build:
+build: $(SOURCES)
 	go build
 
-check:
+check: ini/syntax/syntax.treerack $(SOURCES)
 	treerack check-syntax ini/syntax/syntax.treerack
 	treerack check -syntax ini/syntax/syntax.treerack examples/skipper.ini
 	go test ./...
 
-.coverprofile:
+.coverprofile: $(SOURCES)
 	go test -coverprofile .coverprofile ./...
 
 cover: .coverprofile
@@ -23,13 +26,16 @@ cover: .coverprofile
 showcover: .coverprofile
 	go tool cover -html .coverprofile
 
-syntax:
+syntax: ini/syntax/syntax.treerack
 	treerack generate -package-name syntax -export -syntax ini/syntax/syntax.treerack > ini/syntax/syntax.go
 	gofmt -w -s ./ini
 
-fmt:
+fmt: $(SOURCES)
 	gofmt -w -s .
 	gofmt -w -s ./ini
 	gofmt -w -s ./keys
 
 precommit: fmt check
+
+imports:
+	goimports -w $(SOURCES)

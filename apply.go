@@ -33,27 +33,27 @@ func overflow(...interface{}) error {
 }
 
 func invalidStringValue(...interface{}) error {
-	return errors.New("invalid string value")
+	return ErrInvalidInputValue
 }
 
 func invalidStructureValue(...interface{}) error {
-	return errors.New("invalid structure value")
+	return ErrInvalidInputValue
 }
 
 func invalidListValue(...interface{}) error {
-	return errors.New("invalid list value")
+	return ErrInvalidInputValue
 }
 
 func invalidMapType(...interface{}) error {
-	return errors.New("invalid map type")
+	return ErrInvalidTarget
 }
 
 func multipleCanonicalKeys(...interface{}) error {
-	return errors.New("multiple canonical keys")
+	return ErrConflictingKeys
 }
 
 func invalidType(...interface{}) error {
-	return errors.New("invalid type")
+	return ErrInvalidInputValue
 }
 
 func invalidTarget(...interface{}) error {
@@ -350,7 +350,7 @@ func applyFloat(v reflect.Value, n Node) (bool, error) {
 		v.SetFloat(rf)
 		return true, nil
 	default:
-		return false, invalidNumericValue(value)
+		return false, ErrLoaderImplementation
 	}
 }
 
@@ -390,6 +390,7 @@ func applyStruct(v reflect.Value, n Node) (bool, error) {
 	for _, key := range n.Keys() {
 		canonical := keys.CanonicalSymbol(key)
 		if _, has := canonicalKeys[canonical]; has {
+			// TODO: this decision should be made in the source or the reader
 			return false, multipleCanonicalKeys(canonical)
 		}
 
@@ -422,6 +423,10 @@ func applyStruct(v reflect.Value, n Node) (bool, error) {
 func applyMap(v reflect.Value, n Node) (bool, error) {
 	t := n.Type()
 
+	if v.Type().Key().Kind() != reflect.String {
+		return false, invalidMapType()
+	}
+
 	if t == Nil {
 		v.Set(reflect.Zero(v.Type()))
 		return true, nil
@@ -431,19 +436,7 @@ func applyMap(v reflect.Value, n Node) (bool, error) {
 		return false, invalidStructureValue()
 	}
 
-	if t&List != 0 {
-		return zeroOrOne(applyStruct, v, n)
-	}
-
-	if v.Type().Key().Kind() != reflect.String {
-		return false, invalidMapType()
-	}
-
 	keys := n.Keys()
-	if len(keys) == 0 {
-		return false, nil
-	}
-
 	if len(keys) == 0 {
 		return false, nil
 	}
@@ -477,11 +470,11 @@ func applyList(v reflect.Value, n Node) (bool, error) {
 	}
 
 	l := n.Len()
+	v.Set(reflect.MakeSlice(v.Type(), l, l))
 	if n.Len() == 0 {
 		return false, nil
 	}
 
-	v.Set(reflect.MakeSlice(v.Type(), l, l))
 	for i := 0; i < l; i++ {
 		piv := reflect.New(v.Type().Elem())
 		if _, err := apply(piv, n.Item(i)); err != nil {
@@ -503,6 +496,14 @@ func applyInterface(v reflect.Value, n Node) (bool, error) {
 	}
 
 	switch {
+	case t&Primitive != 0 && (t&List == 0 || n.Len() <= 1):
+		t := reflect.TypeOf(n.Primitive())
+		if !t.Implements(v.Type()) {
+			return false, invalidType()
+		}
+
+		v.Set(reflect.ValueOf(n.Primitive()))
+		return true, nil
 	case t&List != 0:
 		t := reflect.TypeOf([]interface{}{})
 		if !t.Implements(v.Type()) {
@@ -511,15 +512,11 @@ func applyInterface(v reflect.Value, n Node) (bool, error) {
 
 		pv := reflect.New(t)
 		set, err := apply(pv, n)
-		if err != nil {
-			return false, err
-		}
-
 		if set {
 			v.Set(pv.Elem())
 		}
 
-		return set, nil
+		return set, err
 	case t&Structure != 0:
 		m := map[string]interface{}{}
 		t := reflect.TypeOf(m)
@@ -529,23 +526,11 @@ func applyInterface(v reflect.Value, n Node) (bool, error) {
 
 		vv := reflect.ValueOf(m)
 		set, err := apply(vv, n)
-		if err != nil {
-			return false, err
-		}
-
 		if set {
 			v.Set(vv)
 		}
 
-		return set, nil
-	case t&Primitive != 0:
-		t := reflect.TypeOf(n.Primitive())
-		if !t.Implements(v.Type()) {
-			return false, invalidType()
-		}
-
-		v.Set(reflect.ValueOf(n.Primitive()))
-		return true, nil
+		return set, err
 	default:
 		return false, nil
 	}
@@ -602,10 +587,11 @@ func apply(v reflect.Value, n Node) (bool, error) {
 	case reflect.Ptr:
 		return applyPointer(v, n)
 	default:
-		return false, nil
+		return false, invalidTarget()
 	}
 }
 
+// It may change the target even if fails.
 func Apply(applyTo interface{}, s Source) error {
 	v := reflect.ValueOf(applyTo)
 	if v.Kind() != reflect.Ptr || v.IsNil() {

@@ -4,27 +4,36 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math"
 	"testing"
 )
 
 type testLoader struct {
 	value interface{}
 	fail  bool
-	lie   map[NodeType]NodeType
+	types map[NodeType]NodeType
 }
 
-var errTestLoadFailed = errors.New("test load failed")
+var (
+	errTestLoadFailed = errors.New("test load failed")
+	errOddMapping     = errors.New("odd mapping")
+)
 
-func singleValueLoader(value interface{}) Loader {
-	return testLoader{value: value}
+func singleValueLoader(value interface{}, mapping ...NodeType) Loader {
+	if len(mapping)%2 != 0 {
+		panic(errOddMapping)
+	}
+
+	types := make(map[NodeType]NodeType)
+	for i := 0; i < len(mapping); i += 2 {
+		types[mapping[i]] = mapping[i+1]
+	}
+
+	return testLoader{value: value, types: types}
 }
 
 func failingLoader() Loader {
 	return testLoader{fail: true}
-}
-
-func lyingLoader(value interface{}, from, to NodeType) Loader {
-	return testLoader{value: value, lie: map[NodeType]NodeType{from: to}}
 }
 
 func (l testLoader) Load() (interface{}, error) {
@@ -36,7 +45,7 @@ func (l testLoader) Load() (interface{}, error) {
 }
 
 func (l testLoader) TypeMapping() map[NodeType]NodeType {
-	return l.lie
+	return l.types
 }
 
 func TestApplyInvalidTarget(t *testing.T) {
@@ -236,7 +245,7 @@ func TestApplyToBool(t *testing.T) {
 
 	t.Run("parsed, lying loader", func(t *testing.T) {
 		var o bool
-		s := WithLoader(lyingLoader(42, Int, Bool))
+		s := WithLoader(singleValueLoader(42, Int, Bool))
 		if err := Apply(&o, s); !errors.Is(err, ErrLoaderImplementation) {
 			t.Error("failed to fail with the right error")
 		}
@@ -669,7 +678,7 @@ func TestApplyToInt(t *testing.T) {
 
 		t.Run("lying loader", func(t *testing.T) {
 			var o int
-			s := WithLoader(lyingLoader(true, Bool, Int))
+			s := WithLoader(singleValueLoader(true, Bool, Int))
 			if err := Apply(&o, s); !errors.Is(err, ErrLoaderImplementation) {
 				t.Error("failed to fail with the right error")
 			}
@@ -961,7 +970,7 @@ func TestApplyToUint(t *testing.T) {
 
 		t.Run("lying loader", func(t *testing.T) {
 			var o uint
-			s := WithLoader(lyingLoader(true, Bool, Int))
+			s := WithLoader(singleValueLoader(true, Bool, Int))
 			if err := Apply(&o, s); !errors.Is(err, ErrLoaderImplementation) {
 				t.Error("failed to fail with the right error")
 			}
@@ -969,11 +978,405 @@ func TestApplyToUint(t *testing.T) {
 	})
 }
 
+func TestApplyToFloat(t *testing.T) {
+	t.Run("not a float", func(t *testing.T) {
+		var o float64
+		y := bytes.NewBufferString("true")
+		s := YAML(y)
+		if err := Apply(&o, s); !errors.Is(err, ErrInvalidInputValue) {
+			t.Error("failed to fail with the right value")
+		}
+	})
+
+	t.Run("not parsed", func(t *testing.T) {
+		t.Run("not a number", func(t *testing.T) {
+			var o struct{ Foo float64 }
+			i := bytes.NewBufferString("foo=true")
+			s := INI(i)
+			if err := Apply(&o, s); !errors.Is(err, ErrInvalidInputValue) {
+				t.Error("failed to fail with the right value")
+			}
+		})
+
+		t.Run("number", func(t *testing.T) {
+			var o struct{ Foo float64 }
+			i := bytes.NewBufferString("foo=3.14")
+			s := INI(i)
+			if err := Apply(&o, s); err != nil {
+				t.Error(err)
+			}
+
+			if o.Foo != 3.14 {
+				t.Error("failed to parse float")
+			}
+		})
+	})
+
+	t.Run("parsed", func(t *testing.T) {
+		t.Run("int", func(t *testing.T) {
+			var o float64
+			s := WithLoader(singleValueLoader(42, Int, Int|Float))
+			if err := Apply(&o, s); err != nil {
+				t.Error(err)
+			}
+
+			if o != 42 {
+				t.Error("failed to parse float")
+			}
+		})
+
+		t.Run("uint", func(t *testing.T) {
+			var o float64
+			s := WithLoader(singleValueLoader(uint(42), Int, Int|Float))
+			if err := Apply(&o, s); err != nil {
+				t.Error(err)
+			}
+
+			if o != 42 {
+				t.Error("failed to parse float")
+			}
+		})
+
+		t.Run("float", func(t *testing.T) {
+			var o float64
+			y := bytes.NewBufferString("3.14")
+			s := YAML(y)
+			if err := Apply(&o, s); err != nil {
+				t.Error(err)
+			}
+
+			if o != 3.14 {
+				t.Error("failed to apply float")
+			}
+		})
+
+		t.Run("overflow", func(t *testing.T) {
+			var o float32
+			s := WithLoader(singleValueLoader(math.MaxFloat32 * 2))
+			if err := Apply(&o, s); !errors.Is(err, ErrNumericOverflow) {
+				t.Error("failed to fail with the right error")
+			}
+		})
+
+		t.Run("lying loader", func(t *testing.T) {
+			var o float64
+			s := WithLoader(singleValueLoader(true, Bool, Float))
+			if err := Apply(&o, s); !errors.Is(err, ErrLoaderImplementation) {
+				t.Error("failed to fail with the right value", err)
+			}
+		})
+	})
+}
+
+func TestApplyToString(t *testing.T) {
+	t.Run("not a string", func(t *testing.T) {
+		var o string
+		j := bytes.NewBufferString("42")
+		s := JSON(j)
+		if err := Apply(&o, s); !errors.Is(err, ErrInvalidInputValue) {
+			t.Error("failed to fail with the right error")
+		}
+	})
+
+	t.Run("optional list", func(t *testing.T) {
+		t.Run("too many values", func(t *testing.T) {
+			var o struct{ Foo string }
+			i := bytes.NewBufferString("foo=bar\nfoo=baz")
+			s := INI(i)
+			if err := Apply(&o, s); !errors.Is(err, ErrTooManyValues) {
+				t.Error("failed to fail with the right value")
+			}
+		})
+
+		t.Run("no values", func(t *testing.T) {
+			o := struct{ Foo string }{"hello"}
+			i := bytes.NewBufferString("foo.bar=baz\nfoo.bar=qux")
+			s := INI(i)
+			if err := Apply(&o, s); err != nil {
+				t.Error(err)
+			}
+
+			if o.Foo != "hello" {
+				t.Error("failed ignore no value")
+			}
+		})
+
+		t.Run("one value", func(t *testing.T) {
+			var o struct{ Foo string }
+			i := bytes.NewBufferString("foo=bar")
+			s := INI(i)
+			if err := Apply(&o, s); err != nil {
+				t.Error(err)
+			}
+
+			if o.Foo != "bar" {
+				t.Error("failed to apply string")
+			}
+		})
+	})
+
+	t.Run("lying loader", func(t *testing.T) {
+		var o string
+		s := WithLoader(singleValueLoader(42, Int, String))
+		if err := Apply(&o, s); !errors.Is(err, ErrInvalidInputValue) {
+			t.Error("failed to fail with the right error")
+		}
+	})
+
+	t.Run("success", func(t *testing.T) {
+		var o string
+		j := bytes.NewBufferString(`"hello"`)
+		s := JSON(j)
+		if err := Apply(&o, s); err != nil {
+			t.Error(err)
+		}
+
+		if o != "hello" {
+			t.Error("failed to apply string")
+		}
+	})
+}
+
+func TestApplyToStruct(t *testing.T) {
+	t.Run("not a structure", func(t *testing.T) {
+		var o struct{ Foo int }
+		j := bytes.NewBufferString("42")
+		s := JSON(j)
+		if err := Apply(&o, s); !errors.Is(err, ErrInvalidInputValue) {
+			t.Error("failed to fail with the right error")
+		}
+	})
+
+	t.Run("conflicting canonical keys", func(t *testing.T) {
+		var o struct{ FooBar int }
+		j := bytes.NewBufferString(`{"fooBar": 21, "foo_bar": 42}`)
+		s := JSON(j)
+		if err := Apply(&o, s); !errors.Is(err, ErrConflictingKeys) {
+			t.Error("failed to fail with the right error")
+		}
+	})
+
+	t.Run("non-exported key", func(t *testing.T) {
+		o := struct {
+			Foo int
+			bar int
+		}{Foo: 21, bar: 63}
+		j := bytes.NewBufferString(`{"foo": 42, "bar": 84}`)
+		s := JSON(j)
+		if err := Apply(&o, s); err != nil {
+			t.Error(err)
+		}
+
+		if o.Foo != 42 || o.bar != 63 {
+			t.Error("failed to ignore non-exported field")
+		}
+	})
+
+	t.Run("non-existing key", func(t *testing.T) {
+		o := struct {
+			Foo int
+			Bar int
+		}{Foo: 21, Bar: 63}
+		j := bytes.NewBufferString(`{"foo": 42}`)
+		s := JSON(j)
+		if err := Apply(&o, s); err != nil {
+			t.Error(err)
+		}
+
+		if o.Foo != 42 || o.Bar != 63 {
+			t.Error("failed to ignore non-existing key")
+		}
+	})
+
+	t.Run("invalid field value", func(t *testing.T) {
+		var o struct{ Foo int }
+		j := bytes.NewBufferString(`{"foo": true}`)
+		s := JSON(j)
+		if err := Apply(&o, s); !errors.Is(err, ErrInvalidInputValue) {
+			t.Error("failed to fail with the right error")
+		}
+	})
+
+	t.Run("apply", func(t *testing.T) {
+		var o struct {
+			Foo int
+			Bar int
+		}
+		j := bytes.NewBufferString(`{"foo": 42, "bar": 84}`)
+		s := JSON(j)
+		if err := Apply(&o, s); err != nil {
+			t.Error(err)
+		}
+
+		if o.Foo != 42 || o.Bar != 84 {
+			t.Error("failed to apply struct")
+		}
+	})
+}
+
+func TestApplyToMap(t *testing.T) {
+	t.Run("non-string key", func(t *testing.T) {
+		o := make(map[int]int)
+		j := bytes.NewBufferString(`{"21": 42}`)
+		s := JSON(j)
+		if err := Apply(&o, s); !errors.Is(err, ErrInvalidTarget) {
+			t.Error("failed to fail with the right error")
+		}
+	})
+
+	t.Run("nil", func(t *testing.T) {
+		o := make(map[string]int)
+		o["foo"] = 42
+		j := bytes.NewBufferString("null")
+		s := JSON(j)
+		if err := Apply(&o, s); err != nil {
+			t.Error(err)
+		}
+
+		if _, ok := o["foo"]; ok {
+			t.Error("failed to apply map")
+		}
+	})
+
+	t.Run("not a structure", func(t *testing.T) {
+		o := make(map[string]int)
+		j := bytes.NewBufferString("42")
+		s := JSON(j)
+		if err := Apply(&o, s); !errors.Is(err, ErrInvalidInputValue) {
+			t.Error("failed to fail with the right error")
+		}
+	})
+
+	t.Run("no fields", func(t *testing.T) {
+		o := make(map[string]int)
+		o["foo"] = 42
+		j := bytes.NewBufferString("{}")
+		s := JSON(j)
+		if err := Apply(&o, s); err != nil {
+			t.Error(err)
+		}
+
+		if o["foo"] != 42 {
+			t.Error("failed leave map values")
+		}
+	})
+
+	t.Run("invalid field type", func(t *testing.T) {
+		var o map[string]int
+		j := bytes.NewBufferString(`{"foo": "bar"}`)
+		s := JSON(j)
+		if err := Apply(&o, s); !errors.Is(err, ErrInvalidInputValue) {
+			t.Error("failed to fail with the right error")
+		}
+	})
+
+	t.Run("uninitialized", func(t *testing.T) {
+		var o struct{ M map[string]int }
+		j := bytes.NewBufferString(`{"m": {"foo": 21, "bar": 42}}`)
+		s := JSON(j)
+		if err := Apply(&o, s); err != nil {
+			t.Error(err)
+		}
+
+		if o.M["foo"] != 21 || o.M["bar"] != 42 {
+			t.Error("failed to apply map")
+			t.Log(o.M == nil)
+		}
+	})
+
+	t.Run("initialized", func(t *testing.T) {
+		o := make(map[string]int)
+		o["foo"] = 21
+		o["bar"] = 42
+		j := bytes.NewBufferString(`{"bar": 63, "baz": 84}`)
+		s := JSON(j)
+		if err := Apply(&o, s); err != nil {
+			t.Error(err)
+		}
+
+		if o["foo"] != 21 || o["bar"] != 63 || o["baz"] != 84 {
+			t.Error("failed to apply map")
+		}
+	})
+}
+
+func TestApplyToList(t *testing.T) {
+	t.Run("nil", func(t *testing.T) {
+		o := []int{1, 2, 3}
+		j := bytes.NewBufferString("null")
+		s := JSON(j)
+		if err := Apply(&o, s); err != nil {
+			t.Error(err)
+		}
+
+		if len(o) != 0 {
+			t.Error("failed to apply nil to list")
+		}
+	})
+
+	t.Run("not a list", func(t *testing.T) {
+		var o []int
+		j := bytes.NewBufferString("42")
+		s := JSON(j)
+		if err := Apply(&o, s); !errors.Is(err, ErrInvalidInputValue) {
+			t.Error("failed to fail with the right error")
+		}
+	})
+
+	t.Run("empty list", func(t *testing.T) {
+		o := []int{1, 2, 3}
+		j := bytes.NewBufferString("[]")
+		s := JSON(j)
+		if err := Apply(&o, s); err != nil {
+			t.Error(err)
+		}
+
+		if len(o) != 0 || o == nil {
+			t.Error("failed to apply empty list")
+		}
+	})
+
+	t.Run("invalid item type", func(t *testing.T) {
+		var o []int
+		j := bytes.NewBufferString(`["bar"]`)
+		s := JSON(j)
+		if err := Apply(&o, s); !errors.Is(err, ErrInvalidInputValue) {
+			t.Error("failed to fail with the right error")
+		}
+	})
+
+	t.Run("uninitialized", func(t *testing.T) {
+		var o []int
+		j := bytes.NewBufferString("[1, 2, 3]")
+		s := JSON(j)
+		if err := Apply(&o, s); err != nil {
+			t.Error(err)
+		}
+
+		if len(o) != 3 || o[0] != 1 || o[1] != 2 || o[2] != 3 {
+			t.Error("failed to apply empty list")
+		}
+	})
+
+	t.Run("initialized", func(t *testing.T) {
+		o := []int{1, 2, 3}
+		j := bytes.NewBufferString("[4, 5, 6]")
+		s := JSON(j)
+		if err := Apply(&o, s); err != nil {
+			t.Error(err)
+		}
+
+		if len(o) != 3 || o[0] != 4 || o[1] != 5 || o[2] != 6 {
+			t.Error("failed to apply empty list")
+		}
+	})
+}
+
 func TestApplyToInterface(t *testing.T) {
 	type iface interface{}
 
 	t.Run("nil", func(t *testing.T) {
-		t.Run("nil", func(t *testing.T) {
+		t.Run("uninitialized", func(t *testing.T) {
 			var o iface
 			j := bytes.NewBufferString("null")
 			s := JSON(j)
@@ -1001,7 +1404,16 @@ func TestApplyToInterface(t *testing.T) {
 	})
 
 	t.Run("primitive", func(t *testing.T) {
-		t.Run("nil", func(t *testing.T) {
+		t.Run("does not implement", func(t *testing.T) {
+			var o interface{ Foo() }
+			j := bytes.NewBufferString("42")
+			s := JSON(j)
+			if err := Apply(&o, s); !errors.Is(err, ErrInvalidInputValue) {
+				t.Error("failed to fail with the right error")
+			}
+		})
+
+		t.Run("uninitialized", func(t *testing.T) {
 			var o iface
 			j := bytes.NewBufferString("42")
 			s := JSON(j)
@@ -1029,7 +1441,16 @@ func TestApplyToInterface(t *testing.T) {
 	})
 
 	t.Run("list", func(t *testing.T) {
-		t.Run("nil", func(t *testing.T) {
+		t.Run("does not implement", func(t *testing.T) {
+			var o interface{ Foo() }
+			j := bytes.NewBufferString("[1, 2, 3]")
+			s := JSON(j)
+			if err := Apply(&o, s); !errors.Is(err, ErrInvalidInputValue) {
+				t.Error("failed to fail with the right error")
+			}
+		})
+
+		t.Run("uninitialized", func(t *testing.T) {
 			var o iface
 			j := bytes.NewBufferString("[1, 2, 3]")
 			s := JSON(j)
@@ -1067,7 +1488,16 @@ func TestApplyToInterface(t *testing.T) {
 	})
 
 	t.Run("structure", func(t *testing.T) {
-		t.Run("nil", func(t *testing.T) {
+		t.Run("does not implement", func(t *testing.T) {
+			var o interface{ Foo() }
+			j := bytes.NewBufferString(`{"foo": 21, "bar": 42}`)
+			s := JSON(j)
+			if err := Apply(&o, s); !errors.Is(err, ErrInvalidInputValue) {
+				t.Error("failed to fail with the right error")
+			}
+		})
+
+		t.Run("uninitialized", func(t *testing.T) {
 			var o iface
 			j := bytes.NewBufferString(`{"foo": 42, "bar": 84}`)
 			s := JSON(j)
@@ -1103,4 +1533,79 @@ func TestApplyToInterface(t *testing.T) {
 			}
 		})
 	})
+
+	t.Run("not implemented source type", func(t *testing.T) {
+		var o iface = 21
+		s := WithLoader(singleValueLoader(42, Int, ignored))
+		if err := Apply(&o, s); err != nil {
+			t.Error(err)
+		}
+
+		if o != 21 {
+			t.Error("failed to ignore not implemented source type")
+		}
+	})
+}
+
+func TestApplyToPointer(t *testing.T) {
+	t.Run("uninitialized", func(t *testing.T) {
+		var o struct{ Foo *int }
+		j := bytes.NewBufferString(`{"foo": 42}`)
+		s := JSON(j)
+		if err := Apply(&o, s); err != nil {
+			t.Error(err)
+		}
+
+		if *o.Foo != 42 {
+			t.Error("failed to apply to pointer")
+		}
+	})
+
+	t.Run("elem fails", func(t *testing.T) {
+		var o *int
+		j := bytes.NewBufferString(`"foo"`)
+		s := JSON(j)
+		if err := Apply(&o, s); !errors.Is(err, ErrInvalidInputValue) {
+			t.Error("failed to fail with the right error")
+		}
+	})
+
+	t.Run("elem not set", func(t *testing.T) {
+		var o struct{ Foo *int }
+		i := 42
+		o.Foo = &i
+		j := bytes.NewBufferString("{}")
+		s := JSON(j)
+		if err := Apply(&o, s); err != nil {
+			t.Error(err)
+		}
+
+		if *o.Foo != 42 {
+			t.Error("failed to preserve default value")
+		}
+	})
+
+	t.Run("elem set", func(t *testing.T) {
+		var o struct{ Foo *int }
+		i := 21
+		o.Foo = &i
+		j := bytes.NewBufferString(`{"foo": 42}`)
+		s := JSON(j)
+		if err := Apply(&o, s); err != nil {
+			t.Error(err)
+		}
+
+		if *o.Foo != 42 {
+			t.Error("failed to preserve default value")
+		}
+	})
+}
+
+func TestApplyToInvalidTarget(t *testing.T) {
+	var o func()
+	j := bytes.NewBufferString("null")
+	s := JSON(j)
+	if err := Apply(&o, s); !errors.Is(err, ErrInvalidTarget) {
+		t.Error("failed to fail with the right error", err)
+	}
 }
